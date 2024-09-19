@@ -17,7 +17,7 @@ def index(username):
         user = get_user(username)
         user.current_auth_time = datetime.datetime.now()
         if current_user.username == username:
-            if current_user.is_verified:
+            if not current_user.is_verified:
                 current_user.generate_verification_token()
         db.session.commit() 
  
