@@ -33,11 +33,11 @@ def index(username):
             }, app.config['SECRET_KEY'], algorithm='HS256')
 
             # Redirect to admin subdomain with the token
-            return redirect(f'https://admin.savantlab.org/auth/{token}')
+            return redirect(f'https://admin.savantlab.org/{token}')
 
         if admin is False:
             return redirect('https://login.savantlab.org')
-       #  return redirect('https://admin.savantlab.org') 
+            
     return redirect('https://login.savantlab.org/auth/login')
 
 
