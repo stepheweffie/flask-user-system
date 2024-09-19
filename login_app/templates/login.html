@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from 'bootstrap5/form.html' import render_form %}
+
+<title>{% block title %}Savantlab Login{% endblock %}</title>
+{% block content %}
+<h1 class="animate__animated fadeIn">Login</h1>
+
+<form method="POST" action="{{ url_for('auth.login_post') }}">    
+    {{ form.csrf_token }} 
+    {{ render_form(form) }}   
+</form>
+
+{% endblock %}
+

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from 'bootstrap5/form.html' import render_form %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Form</title>
+</head>
+<body>  
+	{% if current_user.is_authenticated %}
+	{% block content %}
+	<p>
+	<form method="POST" action="{{ url_for('auth.verify_post', username=current_user.username) }}">
+        {{ form.csrf_token }}
+
+
+	{{ render_form(form) }}
+
+
+        </form>
+	</p>
+	{% endblock %}
+	{% endif %}
+</body>
+</html>

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from 'bootstrap5/form.html' import render_form %}
+
+<!doctype html>
+<title>Subscriber</title>
+
+{% if current_user.is_authenticated %}
+
+<body>
+
+{% block body %}
+{{ super() }}
+            {% block content %}
+	    <h1>Hello, {{ current_user.username }}!</h1><p>
+	    <h3>Manage Your Subscription</h3></p>
+<form method="POST" action="{{ url_for('auth.account_post') }}">
+    {{ form.csrf_token }}
+    {{ render_form(form) }}
+</form>	    	
+
+	    {% endblock %}
+{% endblock %}
+
+</body>
+
+{% endif %}
+</html>
+
+-- INSERT --
