@@ -1,0 +1,36 @@
+version: '3'
+services:
+  app:
+    build: .
+    image: login_app
+    container_name: login
+    ports:
+      - "587:587"
+      - "25:25"
+    volumes:
+      - ./instance:/instance  # Mount a volume for SQLite database
+    networks:
+      - livenetwork
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DATABASE_URL=sqlite:///login.db
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # - ./data/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /data/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - app
+    networks:
+      - livenetwork
+
+networks:
+  livenetwork:
+    driver: bridge
+                                                                
+
