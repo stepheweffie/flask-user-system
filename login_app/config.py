@@ -7,7 +7,7 @@ from collections import OrderedDict
 
 class Config:
     SECRET_KEY = os.urandom(32)
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///users.db'
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///login.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # We need to include the root directory in sys.path to ensure that we can
