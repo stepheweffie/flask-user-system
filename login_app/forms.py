@@ -1,8 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import QuerySelectField, StringField, PasswordField, BooleanField, SubmitField, validators, IntegerField
-
-def tier_query():
-    return SubscriptionTier.query.all()
+from wtforms import StringField, PasswordField, BooleanField, SubmitField, validators, IntegerField
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[validators.DataRequired(), validators.Length(1, 20)])
@@ -22,11 +19,4 @@ class VerifyForm(FlaskForm):
 class AuthForm(FlaskForm):
     shortcode = IntegerField('Shortcode', validators=[validators.DataRequired(), validators.Length(1, 7)])
     submit = SubmitField()
- 
-class SubscriberForm(FlaskForm):
-    tier = QuerySelectField('Subscription Tier', 
-                            query_factory=tier_query, 
-                            get_label='name',
-                            allow_blank=True,
-                            blank_text='Select a tier...')
-    submit = SubmitField('Subscribe')
+

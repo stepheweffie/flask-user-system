@@ -20,15 +20,15 @@ PARENT_DOMAIN = os.getenv('PARENT_DOMAIN')
 '''
 with app.test_request_context():
     print(url_for('index'))
-    print(url_for('login'))
-    print(url_for('login', next='/'))
-    print(url_for('profile', username='John Doe'))
+    print(url_for('auth.login'))
+    print(url_for('auth.login', next='/'))
+    print(url_for('user.index', username='John Doe'))
 
 '''
 
 def create_app():
     app = Flask(__name__)  
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///login.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///login.sqlite'
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
     app.config['PARENT_DOMAIN'] = PARENT_DOMAIN
     app.config['ADMIN_USER'] = os.getenv('ADMIN_USER')
@@ -42,8 +42,7 @@ def create_app():
     app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER')
     app.config['BOOTSTRAP_BOOTSWATCH_THEME'] = 'lumen'
 
-    db.init_app(app)
-    # Session.init_app(app)
+    db.init_app(app) 
     ma.init_app(app)
     migrate = Migrate(app, db)
     login_manager.init_app(app)
@@ -63,6 +62,8 @@ def create_app():
     @login_manager.unauthorized_handler
     def unauthorized():
         if request.blueprint == 'auth':
+            abort(HTTPStatus.UNAUTHORIZED)
+        if request.blueprint == 'user':
             abort(HTTPStatus.UNAUTHORIZED)
         if request.blueprint == 'mgmt':
             abort(HTTPStatus.UNAUTHORIZED)
@@ -87,7 +88,6 @@ def create_app():
     # Create database tables
     with app.app_context():
         db.create_all()
-       #  app.Session = Session
 
     return app
 

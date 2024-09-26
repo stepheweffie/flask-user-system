@@ -10,17 +10,35 @@ import datetime
 user = Blueprint('user', __name__)
 
 
+def generate_auth_link(username):
+    auth_str = '-random-insults/'
+    return username + auth_str
+
+
 @user.route('/<username>', methods=['GET', 'POST'])
 @login_required
 def index(username):
+    
     if current_user.is_authenticated:
-        user = get_user(username)
-        user.current_auth_time = datetime.datetime.now()
-        if current_user.username == username:
-            if current_user.is_verified:
-                current_user.generate_verification_token()
-        db.session.commit() 
- 
+        # connect login.db to users.db and instantiate a session for current_user
+        user = get_user(username) 
+        token = user.get_active_verification_token
+        active_token = user.check_verification_token(token)
+
+        if not current_user.is_active:
+            return redirect(url_for('auth.send_onboard_email', username=username))
+
+        if not current_user.is_verified and active_token is True:
+            link = current_user.auth_link_route
+            if link is None:
+                auth_link = generate_auth_link(username)
+                user.auth_link_route = str(auth_link)
+                db.session.commit()
+            return redirect(url_for('auth.send_code_auth', username=username))
+    
+        return redirect('https://savantlab.org')
+    
+
     if current_user.is_authenticated and hasattr(current_user, 'is_admin'):
         admin = current_user.is_admin
         if admin:

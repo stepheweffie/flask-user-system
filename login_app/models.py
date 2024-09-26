@@ -12,7 +12,7 @@ import secrets
 # Base = declarative_base()
 db = SQLAlchemy()
 ma = Marshmallow()
-# engine = sa.create_engine('sqlite:///users.db')
+# engine = sa.create_engine('sqlite:///login.db')
 
 
 class User(UserMixin, db.Model):
@@ -28,7 +28,7 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now)
     last_login = db.Column(db.DateTime, default=datetime.now, nullable=True)
     current_auth_time = db.Column(db.DateTime, default=datetime.now, nullable=True)
-    subscriber = db.relationship('Subscriber', back_populates='user', uselist=False)
+    auth_link_route = db.Column(db.String(60), nullable=True, default=None)
 
     __table_args__ = (
         db.UniqueConstraint('username', name='user_account_username'),
@@ -38,6 +38,17 @@ class User(UserMixin, db.Model):
     def __init__(self, username, password):
         self.username = username
         self.set_password(password)    
+    
+    def get_active_verification_token(self):
+        return VerificationToken.query.filter_by(user_id=self.id, is_used=False).order_by(VerificationToken.created_at.desc()).first()
+
+    def check_verification_token(self, token):
+        verification_token = VerificationToken.query.filter_by(user_id=self.id, token=token, is_used=False).first()
+        if verification_token and not verification_token.is_expired():
+            # verification_token.is_used = True
+            # db.session.commit()
+            return True
+        return False
 
     def generate_verification_token(self):
         token = VerificationToken(user_id=self.id, token=secrets.token_urlsafe(32))
@@ -52,6 +63,7 @@ class User(UserMixin, db.Model):
     def __repr__(self):
          return f'<User {self.username}>'
 
+
 # You want to add verification tokens
 class VerificationToken(db.Model):
     __tablename__ = 'verification_token'
@@ -61,37 +73,12 @@ class VerificationToken(db.Model):
     token = db.Column(db.String(100), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     user = db.relationship('User', backref=db.backref('verification_token', uselist=False))
+    is_used = db.Column(db.Boolean, default=False)
+
     def is_expired(self, expiration_hours=1):
         return datetime.datetime.now() > self.created_at + timedelta(hours=expiration_hours) 
     def __repr__(self):
         return f'<VerificationToken {self.token}>'
-
-
-class Subscriber(db.Model):
-    __tablename__ = 'subscriber'
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    tier = db.Column(db.String(50), nullable=False)
-    start_date = db.Column(db.DateTime, default=datetime.now)
-    end_date = db.Column(db.DateTime)
-
-    user = db.relationship('User', back_populates='subscriber')
-
-    def __repr__(self):
-        return f'<Subscriber {self.user.username} - Tier: {self.tier}>'
-
-
-class SubscriptionTier(db.Model):
-    __tablename__ = 'subscription_tier'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    description = db.Column(db.String(200))
-    price = db.Column(db.Float, nullable=False)
-
-    def __repr__(self):
-        return f'<SubscriptionTier {self.name}>'
 
 
 class UserSchema(SQLAlchemyAutoSchema):
@@ -108,24 +95,7 @@ class VerificationTokenSchema(SQLAlchemyAutoSchema):
         include_relationships = True
         load_instance = True
 
-
-class SubscriberSchema(SQLAlchemyAutoSchema):
-    class Meta:
-        model = Subscriber
-        include_relationships = True
-        load_instance = True
-
-
-class SubscriptionTierSchema(SQLAlchemyAutoSchema):
-    class Meta:
-        model = SubscriptionTier
-        load_instance = True
-
-
-subscriber_schema = SubscriberSchema()
-subscribers_schema = SubscriberSchema(many=True)
-subscription_tier_schema = SubscriptionTierSchema()
-subscription_tiers_schema = SubscriptionTierSchema(many=True)
+  
 user_schema = UserSchema()
 users_schema = UserSchema(many=True)
 verification_token_schema = VerificationTokenSchema()

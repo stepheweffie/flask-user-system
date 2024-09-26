@@ -45,19 +45,13 @@ def login_post():
         
         try: 
             if user.check_password(password):
-                login_user(user, remember=True, force=True, fresh=True)
-                verified = current_user.is_verified
-                if current_user.is_authenticated and hasattr(current_user, 'email'):
-                    if verified:
-                        return redirect(url_for('user.index', username=username))
-                    
-                    return redirect(url_for('auth.authorize', username=username))
-                if current_user.is_authenticated:
-                    verify(username)
+                login_user(user, remember=True, force=True, fresh=True)    
+                return redirect(url_for('user.index', username=username))
+                      
             flash('Incorrect Password', 'warning')
+
         except AttributeError:
             return redirect('https://login.savantlab.org/auth/register') 
-    
     return redirect('https://login.savantlab.org/auth/login')
 
 
@@ -80,12 +74,8 @@ def register_post():
         verified = user.is_verified
         if verified:
             return redirect(url_for('user.index', username=username))
-        
-        form = VerifyForm()
-        return redirect(url_for('auth.verify', username=username, form=form))
     
-    form = LoginForm()
-    return redirect(url_for('auth.login', form=form))
+    return redirect(url_for('auth.authorize', form=form))
 
 
 @auth.route('/verify/<username>', methods=['GET'])
@@ -158,12 +148,13 @@ def login():
         if verified:
             return redirect(url_for('user.index', username=username))       
         
-        if current_user and hasattr(current_user, 'email'):        
+        if current_user and hasattr(current_user, 'sms'):        
             
             verify_current_user(username)
             shortcode = user.shortcode
-            send_code_auth_email(username)
-            return redirect(url_for('user.index', username=username))
+            send_code_auth(username)
+        
+        return redirect(url_for('auth.authorize', username=username))
 
     return render_template('login.html', form=form)
 
@@ -186,43 +177,79 @@ def register():
     return render_template('register.html', form=form)
 
 
-@auth.route('/send-code-auth-email/<username>', methods=['GET'])
+@auth.route('/send-onboard-email/<username>', methods=['GET'])
 @login_required
-def send_code_auth_email(username):
+def send_onboard_email(username):
+    user = get_user(username) 
+    # active = current_user.is_active 
+    
+    if not current_user.is_active:
+        greeting = 'Hey, Thanks!'
+        message = 'Some Content Here'
+        try:
+            # Send an email with Flask-Mail
+            msg = Message(
+                greeting,
+                recipients=[user.email],
+                body=message
+                )
+            mail.send(msg) 
+            user.is_active = True
+            return redirect(url_for('user.index', username=username))
+
+        except TypeError:
+            return redirect(url_for('auth.authorize', username=username))
+
+    return redirect(url_for('user.index', username=username))
+
+
+@auth.route('/send-code-auth/<username>', methods=['GET'])
+@login_required
+def send_code_auth(username):
     user = get_user(username)
     verified = user.is_verified
     shortcode = user.shortcode
-    
-    # Refactor to two auth methods one for shortcode to SMS via email
-    # the other is verification link in email click through
+    link = user.auth_link_route
+     
+    # If the verification token has been generated, create the link route for email message
 
-    if verified:
+    if current_user.is_authenticated and current_user.is_verified:
         return redirect(url_for('user.index', username=username))
+    
+    if current_user.is_authenticated and hasattr(current_user, 'verification_token'):
 
-    if current_user.is_authenticated and hasattr(current_user, 'email'): 
-        if 'shortcode' not in session:
-            session['shortcode'] = 0
+        if current_user.is_authenticated and hasattr(current_user, 'sms'): 
+            if 'shortcode' not in session:
+                session['shortcode'] = 0
+                message = 'Welcome to Savantlab.org! Click HERE to enter the following shortcode: ' + str(shortcode)
+                return redirect(url_for('auth.authorize', username=username))
 
-        if session['shortcode'] < 1: 
-            if user.shortcode is not None:
-                session['shortcode'] += 1
-                # Add the URL link https://login.savantlab.org/auth/authorize/{username}/{token} to the email 
-                message = 'Welcome to Savantlab.org! Click HERE to enter the following shortcode: ' + str(shortcode) 
+        if current_user.is_authenticated and hasattr(current_user, 'email'):
+            link = user.auth_link_route
+            if link is None:
+                return redirect(url_for('auth.authorize', username=username))
+
+        if current_user.is_authenticated and hasattr(current_user, 'email'):
+            link = user.auth_link_route
+            if link is not None: 
+                # Add the URL link https://login.savantlab.org/auth/authorize/{username}/{auth_link_route} to the email 
+                greeting = 'Hello, There!'
+                message = 'Welcome to Savantlab.org! Click HERE: ' + str(link) 
+                
                 try: 
                     # Send an email with Flask-Mail
                     msg = Message(
-                        'Hello, There!',
+                        greeting,
                     recipients=[user.email],
                     body=message
                     )
                     mail.send(msg)
                     
-                    return redirect(url_for('user.index', username=username))
+                    return redirect(url_for('auth.authorize', username=username))
                 
                 except TypeError:
                     return redirect(url_for('auth.authorize', username=username))
-        
-        return redirect(url_for('user.index', username=username))
+    
     return redirect(url_for('auth.verify', username=username))
 
 
@@ -243,11 +270,14 @@ def authorize_post(username):
             user.is_verified = True
             user.shortcode = None
             db.session.commit()
-            
+
+            # Send Thank You/Onboard Email 
             # Reset attempts counter
+            
             session.pop('shortcode_attempts', None)
-            session.pop('shortcode', None)
-            return redirect(url_for('user.index', username=username))
+            session['shortcode'] = 2
+            return redirect(url_for('auth.send_auth_onboard_email', username=username))
+            # return redirect(url_for('user.index', username=username))
         else:
             session['shortcode_attempts'] += 1
             attempts_left = 3 - session['shortcode_attempts']
@@ -272,26 +302,38 @@ def authorize(username):
     form = AuthForm()
     user = get_user(username)
     shortcode = user.shortcode 
+    verified = user.is_verified
 
-    if current_user.is_authenticated and hasattr(current_user, 'is_verified'):
-        verified = user.is_verified 
-        if verified:
-            return redirect(url_for('user.index', username=username))
-
-    if current_user.is_authenticated and hasattr(current_user, 'email'):
-        
-        # user.generate_verification_token 
-        # user.generate_verification_link
-
-        if shortcode is None:  
-            verify_current_user(username) 
-            return redirect(url_for('auth.send_code_auth_email', username=username))  
-            
-        user_email = user.email
-        flash(f'Please check email {user_email}', 'info')
+    if current_user.is_authenticated and hasattr(current_user, 'sms'):
+        if 'shortcode' not in session:  
+            if verified is False:
+                verify_current_user(username) 
+                return redirect(url_for('auth.send_code_auth', username=username))
+        # user_phone = user.phone
+        # flash(f'Please check text {user_text}', 'info')
         return render_template('auth.html', username=username, form=form)
+    
+    if current_user.is_authenticated and hasattr(current_user, 'email'):
+      
+        if user.verification_token is None:
+            user.generate_verification_token
+            db.session.commit()
+            
+        return redirect(url_for('user.index', username=username))  
+    
+    return redirect(url_for('auth.verify', username=username))
 
-    return redirect(url_for('auth.verify', username=username)) 
+
+@auth.route('/authorize/<username>/<auth_link_route>', methods=['GET'])
+@login_required
+def authorize_link(username, auth_link_route):
+    user = get_user(username)
+    link_route = user.auth_link_route
+    if auth_link_route == link_route:
+        user.is_verified = True
+        db.session.commit()
+        return redirect(url_for('user.index', username=username))
+    return redirect(url_for('auth.authorize', username=username))
 
 
 @auth.route('/logout', methods=["GET", 'POST'])
