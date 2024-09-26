@@ -180,10 +180,10 @@ def register():
 @auth.route('/send-onboard-email/<username>', methods=['GET'])
 @login_required
 def send_onboard_email(username):
-    user = get_user(username) 
-    # active = current_user.is_active 
+    user = get_user(username)  
+    token = user.check_verification_token
     
-    if not current_user.is_active:
+    if token and not current_user.is_active:
         greeting = 'Hey, Thanks!'
         message = 'Some Content Here'
         try:
@@ -210,13 +210,13 @@ def send_code_auth(username):
     verified = user.is_verified
     shortcode = user.shortcode
     link = user.auth_link_route
-     
+    token = user.check_verification_token
     # If the verification token has been generated, create the link route for email message
 
     if current_user.is_authenticated and current_user.is_verified:
         return redirect(url_for('user.index', username=username))
     
-    if current_user.is_authenticated and hasattr(current_user, 'verification_token'):
+    if current_user.is_authenticated and hasattr(current_user, 'is_active'):
 
         if current_user.is_authenticated and hasattr(current_user, 'sms'): 
             if 'shortcode' not in session:
@@ -225,13 +225,12 @@ def send_code_auth(username):
                 return redirect(url_for('auth.authorize', username=username))
 
         if current_user.is_authenticated and hasattr(current_user, 'email'):
+            
             link = user.auth_link_route
             if link is None:
-                return redirect(url_for('auth.authorize', username=username))
-
-        if current_user.is_authenticated and hasattr(current_user, 'email'):
-            link = user.auth_link_route
-            if link is not None: 
+                return redirect(url_for('user.index', username=username))
+ 
+            if token is True: 
                 # Add the URL link https://login.savantlab.org/auth/authorize/{username}/{auth_link_route} to the email 
                 greeting = 'Hello, There!'
                 message = 'Welcome to Savantlab.org! Click HERE: ' + str(link) 
@@ -244,8 +243,8 @@ def send_code_auth(username):
                     body=message
                     )
                     mail.send(msg)
-                    
-                    return redirect(url_for('auth.authorize', username=username))
+                    user.use_verification_token() 
+                    return redirect(url_for('user.index', username=username))
                 
                 except TypeError:
                     return redirect(url_for('auth.authorize', username=username))
@@ -303,6 +302,7 @@ def authorize(username):
     user = get_user(username)
     shortcode = user.shortcode 
     verified = user.is_verified
+    token = user.get_active_verification_token
 
     if current_user.is_authenticated and hasattr(current_user, 'sms'):
         if 'shortcode' not in session:  
@@ -315,11 +315,15 @@ def authorize(username):
     
     if current_user.is_authenticated and hasattr(current_user, 'email'):
       
-        if user.verification_token is None:
-            user.generate_verification_token
+        if token is None:
+            current_user.generate_verification_token
             db.session.commit()
-            
-        return redirect(url_for('user.index', username=username))  
+            return redirect(url_for('auth.send_onboard_email', username=username))
+        
+        if current_user.check_verification_token(token):
+            return redirect(url_for('auth.send_code_auth', username=username))
+
+        return redirect(url_for('user.index', username=username))    
     
     return redirect(url_for('auth.verify', username=username))
 
@@ -332,8 +336,8 @@ def authorize_link(username, auth_link_route):
     if auth_link_route == link_route:
         user.is_verified = True
         db.session.commit()
-        return redirect(url_for('user.index', username=username))
-    return redirect(url_for('auth.authorize', username=username))
+    return redirect(url_for('user.index', username=username))
+    
 
 
 @auth.route('/logout', methods=["GET", 'POST'])

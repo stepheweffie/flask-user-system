@@ -11,8 +11,12 @@ user = Blueprint('user', __name__)
 
 
 def generate_auth_link(username):
+    logged_in = get_user(username)
     auth_str = '-random-insults/'
-    return username + auth_str
+    auth_link = auth_str + str(username)
+    logged_in.auth_link_route = str(auth_link)
+    db.session.commit()
+    return auth_link
 
 
 @user.route('/<username>', methods=['GET', 'POST'])
@@ -21,20 +25,15 @@ def index(username):
     
     if current_user.is_authenticated:
         # connect login.db to users.db and instantiate a session for current_user
-        user = get_user(username) 
-        token = user.get_active_verification_token
-        active_token = user.check_verification_token(token)
+        # logged_in = get_user(username) 
+        # token = logged_in.get_active_verification_token
+        # active_token = logged_in.check_verification_token(token) 
 
-        if not current_user.is_active:
-            return redirect(url_for('auth.send_onboard_email', username=username))
-
-        if not current_user.is_verified and active_token is True:
+        if not current_user.is_verified:
             link = current_user.auth_link_route
             if link is None:
                 auth_link = generate_auth_link(username)
-                user.auth_link_route = str(auth_link)
-                db.session.commit()
-            return redirect(url_for('auth.send_code_auth', username=username))
+                #  return redirect(url_for('auth.send_code_auth', username=username))
     
         return redirect('https://savantlab.org')
     

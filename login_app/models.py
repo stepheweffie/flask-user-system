@@ -55,7 +55,14 @@ class User(UserMixin, db.Model):
         db.session.add(token)
         db.session.commit()
     
-    # verification_token = db.relationship('VerificationToken', backref='user', uselist=False, cascade='all, delete-orphan')
+    def use_verification_token(self):
+        verification_token = VerificationToken.query.filter_by(user_id=self.id, token=token, is_used=False).first()
+        verification_token.is_used = True
+        db.session.commit()
+    
+    #  verification_token = db.relationship('VerificationToken', backref='user', uselist=False, cascade='all, delete-orphan')
+    
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
     def check_password(self, password):
@@ -70,7 +77,7 @@ class VerificationToken(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    token = db.Column(db.String(100), unique=True, nullable=False)
+    token = db.Column(db.String(100), unique=True, nullable=False, default=None)
     created_at = db.Column(db.DateTime, default=datetime.now)
     user = db.relationship('User', backref=db.backref('verification_token', uselist=False))
     is_used = db.Column(db.Boolean, default=False)
