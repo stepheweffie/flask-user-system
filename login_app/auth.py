@@ -46,7 +46,7 @@ def login_post():
         try: 
             if user.check_password(password):
                 login_user(user, remember=True, force=True, fresh=True)    
-                return redirect(url_for('user.index', username=username))
+                return redirect(url_for('auth.authorize', username=username))
                       
             flash('Incorrect Password', 'warning')
 
@@ -55,47 +55,18 @@ def login_post():
     return redirect('https://login.savantlab.org/auth/login')
 
 
-@auth.route('/register/post', methods=['POST'])
-def register_post():
-    username = request.form.get('username')
-    password = request.form.get('password') 
-    user = get_user(username)
-
-    if user is False:
-        new_user = User(username=username, password=password)
-        db.session.add(new_user)
-        db.session.commit()    
-        login_user(new_user)  # Log the user in after registration
-        form = VerifyForm()
-        return redirect(url_for('auth.verify', username=username, form=form)) 
-    
-    if user.check_password(password):
-        login_user(user)
-        verified = user.is_verified
-        if verified:
-            return redirect(url_for('user.index', username=username))
-    
-    return redirect(url_for('auth.authorize', form=form))
-
-
 @auth.route('/verify/<username>', methods=['GET'])
 @login_required 
 def verify(username):
-       
-    if not current_user.is_authenticated:
-        return redirect('https://login.savantlab.org/auth/login')
 
     form = VerifyForm()
     user = get_user(username)
-    user_email = user.email
-    verified = user.is_verified 
-    
-    # if current_user.is_active:
-    if verified or user_email is not None:
+    user_email = user.email 
+     
+    if user_email is not None:
         return redirect(url_for('user.index', username=username))    
     
     return render_template('verify.html', username=username, form=form)
-
 
 
 @auth.route("/verify/<username>", methods=['GET','POST'])
@@ -119,8 +90,8 @@ def verify_post(username):
                 if len(user_email) < 6 or '@' not in user_email or '.' not in user_email:
                     flash('Please enter a valid email address.', 'warning')
                     return redirect(url_for('auth.verify', username=username))
-                try:
-                    
+                
+                try: 
                     user.email = user_email  
                     db.session.commit()
                     return redirect(url_for('auth.send_onboard_email', username=username))
@@ -133,7 +104,7 @@ def verify_post(username):
             except KeyError:
                 flash('Email is required.', 'info')
 
-    return redirect(url_for('user.index', username=username))
+    return redirect(url_for('auth.authorize', username=username))
 
 
 @auth.route('/login', methods=["GET"])
@@ -142,18 +113,10 @@ def login():
     if current_user.is_authenticated:
         username = current_user.username
         user = get_user(username)
-        verified = user.is_verified
+        active = user.is_active
 
-        if verified:
-            return redirect(url_for('user.index', username=username))       
-        
-        if current_user and hasattr(current_user, 'sms'):        
-            
-            verify_current_user(username)
-            shortcode = user.shortcode
-            send_code_auth(username)
-        
-        return redirect(url_for('auth.authorize', username=username))
+        if active:
+            return redirect(url_for('auth.authorize', username=username))        
 
     return render_template('login.html', form=form)
 
@@ -161,17 +124,23 @@ def login():
 @auth.route('/register', methods=['GET', 'POST'])
 def register(): 
     form = RegisterForm()
+    
     if current_user.is_authenticated:
         return redirect('https://savantlab.org')
 
     if form.validate_on_submit():
-        username = request.form['username']
+        username = request.form.get('username')
+        password = request.form.get('password')
         user = get_user(username)
+       
         if user is False:
-            return redirect(url_for("auth.register_post", username=username, form=form))
+            new_user = User(username=username, password=password)
+            db.session.add(new_user)
+            db.session.commit()
+            login_user(new_user)
+            return redirect(url_for('auth.authorize', username=username)) 
         
-        form = LoginForm()
-        return redirect(url_for("auth.login", form=form))
+        return redirect(url_for("auth.login"))
     
     return render_template('register.html', form=form)
 
@@ -180,10 +149,10 @@ def register():
 @login_required
 def send_onboard_email(username):
     user = get_user(username)  
-    get_toke = user.get_active_verification_token()
-    token = user.check_verification_token(get_toke)
-    
-    if token and not current_user.is_active:
+    # get_toke = user.get_active_verification_token()
+    # token = user.check_verification_token(get_toke)
+
+    if user.email is not None:
         greeting = 'Hey, Thanks!'
         message = 'Some Content Here'
         try:
@@ -200,7 +169,7 @@ def send_onboard_email(username):
         except TypeError:
             return redirect(url_for('auth.authorize', username=username))
 
-    return redirect(url_for('user.index', username=username))
+    return redirect(url_for('auth.authorize', username=username))
 
 
 @auth.route('/send-code-auth/<username>', methods=['GET'])
@@ -312,7 +281,7 @@ def authorize(username):
         # flash(f'Please check text {user_text}', 'info')
         return render_template('auth.html', username=username, form=form)
     
-    if current_user.is_authenticated and hasattr(current_user, 'email'):
+    if current_user.is_authenticated:   
         
         if not current_user.is_active: 
             return redirect(url_for('auth.send_onboard_email', username=username))
