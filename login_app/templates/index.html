@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% block title %}Logout{% endblock %}
+</head>
+	{% block content %}
+	<div class="container animate__animated fadeInDown">
+	 <a href="{{ url_for('auth.logout') }}">Logout</a>
+	{% endblock %}
+	</div>
+</html>
+
+

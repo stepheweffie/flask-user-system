@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from 'bootstrap5/form.html' import render_form %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %} Savantlab Authorization {% endblock %}</title>
+</head>
+<body>
+
+{% if current_user.is_authenticated %}
+{% block content %}
+
+Hi, {{ current_user.username }}! Check {{ user_email }} for the code and paste below.
+
+<p>
+<form action="{{ url_for('auth.authorize_post', username=current_user.username) }}", method="POST">
+
+{{ render_form(form) }}
+
+</form>   
+{% endblock %}
+{% endif %}
+
+</body>
+</html>
