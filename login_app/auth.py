@@ -88,13 +88,12 @@ def verify(username):
     form = VerifyForm()
     user = get_user(username)
     user_email = user.email
-    verified = user.is_verified
+    verified = user.is_verified 
     
-    if verified:
-        return redirect(url_for('user.index', username=username))
-    
-    if user_email is not None:
+    # if current_user.is_active:
+    if verified or user_email is not None:
         return redirect(url_for('user.index', username=username))    
+    
     return render_template('verify.html', username=username, form=form)
 
 
@@ -124,7 +123,7 @@ def verify_post(username):
                     
                     user.email = user_email  
                     db.session.commit()
-                    return redirect(url_for('auth.authorize', username=username))
+                    return redirect(url_for('auth.send_onboard_email', username=username))
                     
                 except IntegrityError:
                     db.session.rollback()
@@ -181,7 +180,8 @@ def register():
 @login_required
 def send_onboard_email(username):
     user = get_user(username)  
-    token = user.check_verification_token
+    get_toke = user.get_active_verification_token()
+    token = user.check_verification_token(get_toke)
     
     if token and not current_user.is_active:
         greeting = 'Hey, Thanks!'
@@ -301,8 +301,7 @@ def authorize(username):
     form = AuthForm()
     user = get_user(username)
     shortcode = user.shortcode 
-    verified = user.is_verified
-    token = user.get_active_verification_token
+    verified = user.is_verified 
 
     if current_user.is_authenticated and hasattr(current_user, 'sms'):
         if 'shortcode' not in session:  
@@ -314,13 +313,12 @@ def authorize(username):
         return render_template('auth.html', username=username, form=form)
     
     if current_user.is_authenticated and hasattr(current_user, 'email'):
-      
-        if token is None:
-            current_user.generate_verification_token
-            db.session.commit()
+        
+        if not current_user.is_active: 
             return redirect(url_for('auth.send_onboard_email', username=username))
         
-        if current_user.check_verification_token(token):
+        token = current_user.get_active_verification_token()
+        if token:
             return redirect(url_for('auth.send_code_auth', username=username))
 
         return redirect(url_for('user.index', username=username))    

@@ -23,24 +23,11 @@ def generate_auth_link(username):
 @login_required
 def index(username):
     
-    if current_user.is_authenticated:
         # connect login.db to users.db and instantiate a session for current_user
-        # logged_in = get_user(username) 
-        # token = logged_in.get_active_verification_token
-        # active_token = logged_in.check_verification_token(token) 
+        # logged_in = get_user(username)  
 
-        if not current_user.is_verified:
-            link = current_user.auth_link_route
-            if link is None:
-                auth_link = generate_auth_link(username)
-                #  return redirect(url_for('auth.send_code_auth', username=username))
-    
-        return redirect('https://savantlab.org')
-    
-
-    if current_user.is_authenticated and hasattr(current_user, 'is_admin'):
-        admin = current_user.is_admin
-        if admin:
+    if current_user.is_admin:
+        if current_user.is_verified:
             # Generate a JWT token for admin authentication
             token = jwt.encode({
                 'user_id': current_user.id,
@@ -51,11 +38,17 @@ def index(username):
 
             # Redirect to admin subdomain with the token
             return redirect(f'https://admin.savantlab.org/auth/{token}')
+ 
 
-        if admin is False:
-            return redirect('https://login.savantlab.org')
-       #  return redirect('https://admin.savantlab.org') 
-    return redirect('https://login.savantlab.org/auth/login')
+    if current_user.is_authenticated:
+
+        if not current_user.is_verified:
+            link = current_user.auth_link_route
+            if link is None:
+                auth_link = generate_auth_link(username)
+                #  return redirect(url_for('auth.send_code_auth', username=username))
+
+        return redirect('https://savantlab.org')
 
 
 @user.route('/<username>/get/users', methods=['GET'])

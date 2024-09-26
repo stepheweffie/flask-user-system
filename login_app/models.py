@@ -29,6 +29,7 @@ class User(UserMixin, db.Model):
     last_login = db.Column(db.DateTime, default=datetime.now, nullable=True)
     current_auth_time = db.Column(db.DateTime, default=datetime.now, nullable=True)
     auth_link_route = db.Column(db.String(60), nullable=True, default=None)
+    # verification_token = db.relationship('VerificationToken', backref='user', uselist=False, cascade='all, delete-orphan')
 
     __table_args__ = (
         db.UniqueConstraint('username', name='user_account_username'),
@@ -45,23 +46,23 @@ class User(UserMixin, db.Model):
     def check_verification_token(self, token):
         verification_token = VerificationToken.query.filter_by(user_id=self.id, token=token, is_used=False).first()
         if verification_token and not verification_token.is_expired():
-            # verification_token.is_used = True
-            # db.session.commit()
             return True
         return False
 
     def generate_verification_token(self):
         token = VerificationToken(user_id=self.id, token=secrets.token_urlsafe(32))
         db.session.add(token)
-        db.session.commit()
+
     
-    def use_verification_token(self):
-        verification_token = VerificationToken.query.filter_by(user_id=self.id, token=token, is_used=False).first()
-        verification_token.is_used = True
-        db.session.commit()
-    
-    #  verification_token = db.relationship('VerificationToken', backref='user', uselist=False, cascade='all, delete-orphan')
-    
+    def use_verification_token(self, token):
+        #  verification_token = VerificationToken.query.filter_by(user_id=self.id, token=token, is_used=False).first()
+        auth = self.check_verification_token(token)
+        if auth:
+            self.verification_token.is_used = True
+            db.session.commit()
+            return True
+        return False
+
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
