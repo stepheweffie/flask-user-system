@@ -9,9 +9,10 @@ from flask_bootstrap import Bootstrap5
 from dotenv import load_dotenv
 from login_app.models import db, ma, User 
 from flask_mail import Mail
+from flask_login import LoginManager
 
+login_manager = LoginManager()
 load_dotenv()
-login_manager = LoginManager() 
 csrf = CSRFProtect()
 bootstrap = Bootstrap5()
 mail = Mail()
@@ -27,7 +28,7 @@ with app.test_request_context():
 '''
 
 def create_app():
-    app = Flask(__name__)  
+    app = Flask(__name__, static_url_path='/static')  
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///login.sqlite'
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
     app.config['PARENT_DOMAIN'] = PARENT_DOMAIN
@@ -53,18 +54,13 @@ def create_app():
 
 
     from login_app.models import User
-
+    
     @login_manager.user_loader
     def load_user(user_id):
-        user = User.query.get(int(user_id))
-        return user
-
+        return User.query.get(int(user_id))
+    
     @login_manager.unauthorized_handler
     def unauthorized():
-        if request.blueprint == 'auth':
-            abort(HTTPStatus.UNAUTHORIZED)
-        if request.blueprint == 'user':
-            abort(HTTPStatus.UNAUTHORIZED)
         if request.blueprint == 'mgmt':
             abort(HTTPStatus.UNAUTHORIZED)
         return redirect(url_for('auth.login'))

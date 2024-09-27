@@ -1,4 +1,4 @@
-from flask import Blueprint, abort, render_template, redirect, url_for, request, flash, session
+from flask import jsonify, Blueprint, abort, render_template, redirect, url_for, request, flash, session
 from flask_mail import Mail, Message
 from itsdangerous import URLSafeTimedSerializer
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -38,6 +38,8 @@ def get_user(uname):
 
 @auth.route('/login/post', methods=["GET", "POST"])
 def login_post():
+
+    form = LoginForm()
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -52,7 +54,7 @@ def login_post():
 
         except AttributeError:
             return redirect('https://login.savantlab.org/auth/register') 
-    return redirect('https://login.savantlab.org/auth/login')
+   
 
 
 @auth.route('/verify/<username>', methods=['GET'])
@@ -107,24 +109,39 @@ def verify_post(username):
     return redirect(url_for('auth.authorize', username=username))
 
 
-@auth.route('/login', methods=["GET"])
+@auth.route('/login', methods=['GET', 'POST'])
 def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        remember = True if request.form.get('remember') else False
+        
+        user = User.query.filter_by(username=username).first()
+        
+        try:
+            if user.check_password(password):
+                login_user(user, remember=remember, force=True, fresh=True)
+                return redirect(url_for('auth.authorize', username=username))
+
+            flash('Incorrect Password', 'warning')
+
+        except AttributeError:
+            return redirect('https://login.savantlab.org/auth/register')
+
+        if not user or not user.check_password(password):
+            flash('Please check your login details and try again.')
+            return redirect(url_for('auth.login'))
+        
+        return redirect(url_for('user.index', username=user.username))
+    
     form = LoginForm()
-    if current_user.is_authenticated:
-        username = current_user.username
-        user = get_user(username)
-        active = user.is_active
-
-        if active:
-            return redirect(url_for('auth.authorize', username=username))        
-
     return render_template('login.html', form=form)
 
 
 @auth.route('/register', methods=['GET', 'POST'])
-def register(): 
+def register():
     form = RegisterForm()
-    
+
     if current_user.is_authenticated:
         return redirect('https://savantlab.org')
 
@@ -132,16 +149,28 @@ def register():
         username = request.form.get('username')
         password = request.form.get('password')
         user = get_user(username)
-       
+
         if user is False:
             new_user = User(username=username, password=password)
             db.session.add(new_user)
             db.session.commit()
-            login_user(new_user)
-            return redirect(url_for('auth.authorize', username=username)) 
-        
+            
+            # Try to log in the user
+            login_result = login_user(new_user)
+            
+            if login_result:
+                flash('Logged in successfully.', 'success')
+                # Add debug information
+                print(f"User {username} registered and logged in successfully")
+                return redirect(url_for('auth.authorize', username=username))
+            else:
+                flash('Failed to log in after registration.', 'error')
+                print(f"Failed to log in user {username} after registration")
+                return jsonify({"error": "Login failed after registration"}), 500
+
+        flash('Username already exists.', 'error')
         return redirect(url_for("auth.login"))
-    
+
     return render_template('register.html', form=form)
 
 
