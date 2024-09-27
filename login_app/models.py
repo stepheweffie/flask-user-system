@@ -40,7 +40,19 @@ class User(UserMixin, db.Model):
     def __init__(self, username, password):
         self.username = username
         self.set_password(password)    
-    
+   
+    def is_authenticated(self):
+        return True
+
+    def is_active(self):   
+        return True           
+
+    def is_anonymous(self):
+        return False          
+
+    def get_id(self):         
+        return str(self.id)
+
     def get_active_verification_token(self):
         return VerificationToken.query.filter_by(user_id=self.id, is_used=False).order_by(VerificationToken.created_at.desc()).first()
 

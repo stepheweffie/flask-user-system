@@ -2,6 +2,7 @@ from flask import jsonify, Blueprint, abort, render_template, redirect, url_for,
 from flask_mail import Mail, Message
 from itsdangerous import URLSafeTimedSerializer
 from werkzeug.security import generate_password_hash, check_password_hash
+
 from flask_login import login_user, login_required, logout_user, current_user
 from login_app import mail 
 from flask_mail import Message
@@ -34,27 +35,6 @@ def get_user(uname):
     if user:
         return user
     return False
-
-
-@auth.route('/login/post', methods=["GET", "POST"])
-def login_post():
-
-    form = LoginForm()
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = get_user(username)    
-        
-        try: 
-            if user.check_password(password):
-                login_user(user, remember=True, force=True, fresh=True)    
-                return redirect(url_for('auth.authorize', username=username))
-                      
-            flash('Incorrect Password', 'warning')
-
-        except AttributeError:
-            return redirect('https://login.savantlab.org/auth/register') 
-   
 
 
 @auth.route('/verify/<username>', methods=['GET'])
@@ -114,25 +94,25 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        remember = True if request.form.get('remember') else False
         
-        user = User.query.filter_by(username=username).first()
+        user = get_user(username) 
         
-        try:
-            if user.check_password(password):
-                login_user(user, remember=remember, force=True, fresh=True)
-                return redirect(url_for('auth.authorize', username=username))
-
-            flash('Incorrect Password', 'warning')
-
-        except AttributeError:
-            return redirect('https://login.savantlab.org/auth/register')
+        if user and user.check_password(password):
+            login_user(user, fresh=True)
+            flash('Login successful.', 'success')
+            # next_page = request.args.get('nex')
+            # if not next_page or url_parse(next_page).netloc != '':
+            #     next_page = url_for('user.index', username=username)
+            # return redirect(next_page)
+            return redirect(url_for('auth.authorize', username=username))
+        else:
+            flash('Invalid Crediential', 'error')      
 
         if not user or not user.check_password(password):
             flash('Please check your login details and try again.')
             return redirect(url_for('auth.login'))
         
-        return redirect(url_for('user.index', username=user.username))
+         # return redirect(url_for('user.index', username=user.username))
     
     form = LoginForm()
     return render_template('login.html', form=form)
@@ -140,37 +120,30 @@ def login():
 
 @auth.route('/register', methods=['GET', 'POST'])
 def register():
-    form = RegisterForm()
-
-    if current_user.is_authenticated:
-        return redirect('https://savantlab.org')
-
-    if form.validate_on_submit():
-        username = request.form.get('username')
-        password = request.form.get('password')
-        user = get_user(username)
-
-        if user is False:
+    if request.method == 'POST':
+        try:
+            username = request.form.get('username')
+            password = request.form.get('password')
+            
+            user = User.query.filter_by(username=username).first()
+            if user:
+                flash('Username already exists')
+                return redirect(url_for('auth.login'))
+            
             new_user = User(username=username, password=password)
             db.session.add(new_user)
             db.session.commit()
-            
-            # Try to log in the user
-            login_result = login_user(new_user)
-            
-            if login_result:
-                flash('Logged in successfully.', 'success')
-                # Add debug information
-                print(f"User {username} registered and logged in successfully")
-                return redirect(url_for('auth.authorize', username=username))
-            else:
-                flash('Failed to log in after registration.', 'error')
-                print(f"Failed to log in user {username} after registration")
-                return jsonify({"error": "Login failed after registration"}), 500
 
-        flash('Username already exists.', 'error')
-        return redirect(url_for("auth.login"))
-
+            login_user(new_user)
+            return redirect(url_for('auth.send_onboard_email', username=username))
+        
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Registration error: {str(e)}")
+            flash('Registration Unsuccessful')
+            return redirect(url_for('auth.login')) 
+    
+    form = RegisterForm()
     return render_template('register.html', form=form)
 
 
@@ -198,7 +171,7 @@ def send_onboard_email(username):
         except TypeError:
             return redirect(url_for('auth.authorize', username=username))
 
-    return redirect(url_for('auth.authorize', username=username))
+    return redirect(url_for('auth.verify', username=username))
 
 
 @auth.route('/send-code-auth/<username>', methods=['GET'])
@@ -208,8 +181,9 @@ def send_code_auth(username):
     verified = user.is_verified
     shortcode = user.shortcode
     link = user.auth_link_route
-    token = user.check_verification_token
     # If the verification token has been generated, create the link route for email message
+    token = user.get_active_verification_token()
+    check_token = user.check_verification_token(token)
 
     if current_user.is_authenticated and current_user.is_verified:
         return redirect(url_for('user.index', username=username))
@@ -228,7 +202,7 @@ def send_code_auth(username):
             if link is None:
                 return redirect(url_for('user.index', username=username))
  
-            if token is True: 
+            if check_token is True: 
                 # Add the URL link https://login.savantlab.org/auth/authorize/{username}/{auth_link_route} to the email 
                 greeting = 'Hello, There!'
                 message = 'Welcome to Savantlab.org! Click HERE: ' + str(link) 
@@ -300,6 +274,8 @@ def authorize(username):
     user = get_user(username)
     shortcode = user.shortcode 
     verified = user.is_verified 
+    token = user.get_active_verification_token()  
+    #  check_token = user.check_verification_token(token)
 
     if current_user.is_authenticated and hasattr(current_user, 'sms'):
         if 'shortcode' not in session:  
@@ -310,13 +286,14 @@ def authorize(username):
         # flash(f'Please check text {user_text}', 'info')
         return render_template('auth.html', username=username, form=form)
     
-    if current_user.is_authenticated:   
+    if current_user.is_authenticated and verified is False:   
         
         if not current_user.is_active: 
             return redirect(url_for('auth.send_onboard_email', username=username))
         
-        token = current_user.get_active_verification_token()
-        if token:
+        if token is None:
+            user.generate_verification_token()
+            db.session.commit()
             return redirect(url_for('auth.send_code_auth', username=username))
 
         return redirect(url_for('user.index', username=username))    
