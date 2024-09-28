@@ -30,7 +30,7 @@ class User(UserMixin, db.Model):
     last_login = db.Column(db.DateTime, default=datetime.now, nullable=True)
     current_auth_time = db.Column(db.DateTime, default=datetime.now, nullable=True)
     auth_link_route = db.Column(db.String(60), nullable=True, default=None)
-    token = db.Column(db.String(60), nullable=True, default=None)
+    token = db.Column(db.String(150), nullable=True, default=None)
     # verification_token = db.relationship('VerificationToken', backref='user', uselist=False, cascade='all, delete-orphan')
 
     __table_args__ = (

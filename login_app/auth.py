@@ -6,6 +6,7 @@ from functools import wraps
 from urllib.parse import urlparse, urljoin
 import random
 
+from flask_jwt_extended import create_access_token
 from flask_mail import Mail, Message
 from flask_login import login_user, login_required, logout_user, current_user
 from login_app import mail 
@@ -71,7 +72,6 @@ def verify(username):
 
 
 @auth.route("/verify/<username>", methods=['GET','POST'])
-# 
 def verify_post(username):
     user = get_user(username)
     verified = user.is_verified
@@ -94,8 +94,10 @@ def verify_post(username):
                 
                 try: 
                     user.email = user_email  
-                    db.session.commit()
-                    return redirect(url_for('user.index', username=username))
+                    access_token = create_access_token(identity=username)
+                    user.token = access_token
+                    db.session.commit() 
+                    return redirect(url_for('auth.send_onboard_email', username=username))
                     
                 except IntegrityError:
                     db.session.rollback()
@@ -132,8 +134,8 @@ def login():
             flash('Please check your login details and try again.')
             return redirect(url_for('auth.login'))
             
-    if current_user.is_authenticated and current_user.is_verified:
-        return redirect(url_for('user.index', username=current_user.username))
+    if current_user.is_authenticated:
+        return redirect(url_for('auth.authorize', username=current_user.username)) 
 
     # if current_user.is_authenticated and current_user.email is not None:
     #    return redirect(url_for('auth.authorize', username=current_user.username))
@@ -188,8 +190,9 @@ def register():
 def send_onboard_email(username):
     
     user = get_user(username)   
+    active = user.is_active
 
-    if current_user.is_authenticated and not current_user.is_active:
+    if user and active is False and user.email is not None:
         greeting = 'Hey, Thanks!'
         message = 'Some Content Here'
         try:
@@ -202,7 +205,7 @@ def send_onboard_email(username):
             mail.send(msg) 
             user.is_active = True
             db.session.commit()
-            return redirect(url_for('user.index', username=username))
+            return redirect(url_for('auth.authorize', username=username))
 
         except TypeError:
             return redirect(url_for('auth.authorize', username=username))
@@ -216,14 +219,12 @@ def send_code_auth(username):
     verified = user.is_verified
     shortcode = user.shortcode
     link = user.auth_link_route
-    # If the verification token has been generated, create the link route for email message
-    # token = user.get_active_verification_token()
-    # check_token = user.check_verification_token(token)
+    token = user.token
 
-    if current_user.is_authenticated and current_user.is_verified:
+    if user and user.is_verified:
         return redirect(url_for('user.index', username=username))
     
-    if current_user.is_authenticated:
+    if user.token is not None:
 
         if current_user.is_authenticated and hasattr(current_user, 'sms'): 
             if 'shortcode' not in session:
@@ -231,13 +232,13 @@ def send_code_auth(username):
                 message = 'Welcome to Savantlab.org! Click HERE to enter the following shortcode: ' + str(shortcode)
                 return redirect(url_for('auth.authorize', username=username))
 
-        if current_user.is_authenticated and hasattr(current_user, 'email'):
+        if user.email is not None:
             
             link = user.auth_link_route
             if link is None:
                 return redirect(url_for('user.index', username=username))
  
-            if check_token is True: 
+            if user.is_active: 
                 # Add the URL link https://login.savantlab.org/auth/authorize/{username}/{auth_link_route} to the email 
                 greeting = 'Hello, There!'
                 message = 'Welcome to Savantlab.org! Click HERE: ' + str(link) 
@@ -250,7 +251,8 @@ def send_code_auth(username):
                     body=message
                     )
                     mail.send(msg)
-                    user.use_verification_token() 
+                    user.token = None
+                    db.session.commit()
                     return redirect(url_for('user.index', username=username))
                 
                 except TypeError:
@@ -307,7 +309,7 @@ def authorize(username):
     user = get_user(username)
     shortcode = user.shortcode 
     verified = user.is_verified 
-    #  check_token = user.check_verification_token(token)
+    token = user.token
 
     if current_user.is_authenticated and hasattr(current_user, 'sms'):
         if 'shortcode' not in session:  
@@ -317,31 +319,23 @@ def authorize(username):
         # user_phone = user.phone
         # flash(f'Please check text {user_text}', 'info') 
     
-    if current_user.is_authenticated and current_user.email is None:
+    if user.email is None:
         return redirect(url_for('auth.verify', username=username))
 
-    if current_user.is_authenticated and not current_user.is_verified:   
+    if token is not None and verified is False:   
         
-        if not current_user.is_active: 
-            return redirect(url_for('auth.send_onboard_email', username=username))
+        if user.is_active is False: 
+            return redirect(url_for('auth.send_onboard_email', username=username)) 
         
-        if current_user.token is None:
-            user.generate_verification_token()
-            db.session.commit()
-        
-        return redirect(url_for('auth.send_code_auth', username=username)) 
-    
-    if current_user.is_authenticated and current_user.is_verified:
-        return redirect(url_for('user.index', username=username))
-    
-    if current_user.is_authenticated and current_user.is_active:
-        return render_template('auth.html', username=username, form=form)
+        return redirect(url_for('auth.send_code_auth', username=username))    
 
-    return redirect(url_for('user.index', username=username))
+    if verified or current_user.is_authenticated:
+        return redirect(url_for('user.index', username=username))
+
+    return redirect(url_for('auth.login'))
 
 
 @auth.route('/<username>/<auth_link_route>', methods=['GET'])
-@login_required
 def authorize_link(username, auth_link_route):
     user = get_user(username)
     link_route = user.auth_link_route

@@ -11,11 +11,15 @@ from login_app.models import db, ma, User
 from flask_mail import Mail
 from flask_login import LoginManager
 
-login_manager = LoginManager()
+from flask_jwt_extended import JWTManager
+
 load_dotenv()
+login_manager = LoginManager()
 csrf = CSRFProtect()
 bootstrap = Bootstrap5()
 mail = Mail()
+jwt = JWTManager()
+
 PARENT_DOMAIN = os.getenv('PARENT_DOMAIN')
 
 '''
@@ -48,6 +52,7 @@ def create_app():
     migrate = Migrate(app, db)
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
+    jwt.init_app(app)
     csrf.init_app(app)
     mail.init_app(app)
     bootstrap.init_app(app)
@@ -79,7 +84,8 @@ def create_app():
     def index():
         if current_user.is_authenticated:
             return redirect("http://www.savantlab.org", code=302)
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth.register'))    
+      
     
     # Create database tables
     with app.app_context():
