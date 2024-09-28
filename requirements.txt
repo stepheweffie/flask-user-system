@@ -17,8 +17,9 @@ charset-normalizer==3.3.2
 click==8.1.7
 distlib==0.3.8
 filelock==3.15.4
-flask==3.0.3
-Flask-Login
+flask==2.2.5
+Flask-Login==0.6.3
+Flask-JWT-Extended==4.5.2
 flask-session==0.8.0
 flask-sqlalchemy==3.1.1
 flaskcord==0.1.70
@@ -47,5 +48,5 @@ setuptools==73.0.1
 typing-extensions==4.12.2
 urllib3==2.2.2
 virtualenv==20.26.3
-werkzeug==3.0.3
+
 zipp==3.19.2

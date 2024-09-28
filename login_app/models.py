@@ -30,6 +30,7 @@ class User(UserMixin, db.Model):
     last_login = db.Column(db.DateTime, default=datetime.now, nullable=True)
     current_auth_time = db.Column(db.DateTime, default=datetime.now, nullable=True)
     auth_link_route = db.Column(db.String(60), nullable=True, default=None)
+    token = db.Column(db.String(60), nullable=True, default=None)
     # verification_token = db.relationship('VerificationToken', backref='user', uselist=False, cascade='all, delete-orphan')
 
     __table_args__ = (
@@ -40,18 +41,7 @@ class User(UserMixin, db.Model):
     def __init__(self, username, password):
         self.username = username
         self.set_password(password)    
-   
-    def is_authenticated(self):
-        return True
 
-    def is_active(self):   
-        return True           
-
-    def is_anonymous(self):
-        return False          
-
-    def get_id(self):         
-        return str(self.id)
 
     def get_active_verification_token(self):
         return VerificationToken.query.filter_by(user_id=self.id, is_used=False).order_by(VerificationToken.created_at.desc()).first()

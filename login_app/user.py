@@ -50,6 +50,8 @@ def index(username):
 
         return redirect('https://savantlab.org')
 
+    return redirect('https://live.savantlab.org')
+
 
 @user.route('/<username>/get/users', methods=['GET'])
 @login_required
