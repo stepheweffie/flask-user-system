@@ -133,7 +133,7 @@ def login():
             db.session.commit()    
             next_page = request.args.get('next')
             if not next_page or not is_safe_url(next_page):
-                next_page = url_for('user.index', username=username)
+                next_page = url_for('auth.authorize', username=username)
                 resp = make_response(redirect(next_page))
                 set_access_cookies(resp, access_token)
             return resp
@@ -208,10 +208,10 @@ def send_onboard_email(username):
             mail.send(msg) 
             user.is_active = True
             db.session.commit()
-            return redirect(url_for('auth.authorize', username=username))
+            return redirect(url_for('user.index', username=username))
 
         except TypeError:
-            return redirect(url_for('auth.authorize', username=username))
+            return redirect(url_for('user.index', username=username))
 
     return redirect(url_for('auth.verify', username=username))
 
@@ -256,14 +256,14 @@ def send_code_auth(username):
                     mail.send(msg)
                     user.token = None
                     db.session.commit()
-                    user_route = url_for('user.index', username=username)
+                    user_route = url_for('auth.authorize', username=username)
                     resp = make_response(user_route)
                     return resp
                 
                 except TypeError:
                     return redirect(url_for('auth.authorize', username=username))
     
-    return redirect(url_for('user.index', username=username))
+    return redirect(url_for('auth.authorize', username=username))
 
 
 @auth.route('/authorize/post/<username>', methods=['GET', 'POST'])
@@ -315,7 +315,7 @@ def authorize(username):
     user = get_user(username)
     shortcode = user.shortcode 
     verified = user.is_verified 
-    token = user.token
+    auth_route = user.auth_link_route
     jwt_user = get_jwt_identity()
 
     if current_user.is_authenticated and hasattr(current_user, 'sms'):
@@ -329,16 +329,16 @@ def authorize(username):
     if user.email is None:
         return redirect(url_for('auth.verify', username=username))
 
-    if token is not None and verified is False:       
-        
-        access_token = create_access_token(identity=username)
-        resp = make_response(url_for('auth.send_code_auth', username=username))
-        set_access_cookies(resp, access_token)
-        return resp
+    if auth_route is not None and verified is False:
+        access_token = create_access_token(identity=jwt_user)
+       # resp = make_response(url_for('auth.send_code_auth', username=username))
+       #  set_access_cookies(resp, access_token)
+       #  return resp
+        return redirect(url_for('auth.send_code_auth', username=username))
 
-    if token is None or verified:
-        return redirect(PARENT_DOMAIN)
-
+    if auth_route is None or verified: 
+        return redirect(url_for('user.index', username=username))
+    
     return redirect(url_for('auth.login'))
 
 

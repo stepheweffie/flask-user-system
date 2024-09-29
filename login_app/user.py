@@ -50,7 +50,7 @@ def index(username):
     if current_user.is_active:
         if current_user.is_verified is False:
             link = current_user.auth_link_route
-            token = generate_auth_link(username)
+            auth_link = generate_auth_link(username)
         return redirect('https://savantlab.org')
     
     return redirect('https://login.savantlab.org')
