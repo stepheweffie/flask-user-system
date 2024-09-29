@@ -1,6 +1,7 @@
 from flask import jsonify, Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
 import jwt
+from flask_jwt_extended import jwt_required, get_jwt_identity
 import datetime
 from login_app.auth import get_user
 from login_app.forms import LoginForm
@@ -15,16 +16,23 @@ def generate_auth_link(username):
     auth_str = '-random-insults/'
     auth_link = auth_str + str(username)
     logged_in.auth_link_route = str(auth_link)
+    token = logged_in.token
     db.session.commit()
-    return auth_link
+    return token if token is not None else auth_link
 
 
 @user.route('/<username>', methods=['GET', 'POST'])
-@login_required
+@jwt_required()
 def index(username):
     
-        # connect login.db to users.db and instantiate a session for current_user
-        # logged_in = get_user(username)  
+    current_user_id = get_jwt_identity()
+    current_user = User.query.filter_by(username=current_user_id).first()
+    
+    if not current_user:
+        return redirect(url_for('auth.login'))
+    
+    if current_user.username != username:
+        return redirect(url_for('auth.register', username=current_user.username))
 
     if current_user.is_admin:
         if current_user.is_verified:
@@ -37,20 +45,15 @@ def index(username):
             }, app.config['SECRET_KEY'], algorithm='HS256')
 
             # Redirect to admin subdomain with the token
-            return redirect(f'https://admin.savantlab.org/auth/{token}')
+            return redirect(f'https://login.savantlab.org/Savantlab')
  
 
-    if current_user.is_authenticated:
-
-        if not current_user.is_verified:
+    if current_user.is_active:
+        if current_user.is_verified is False:
             link = current_user.auth_link_route
-            if link is None:
-                auth_link = generate_auth_link(username)
-                #  return redirect(url_for('auth.send_code_auth', username=username))
-
+            token = generate_auth_link(username)
         return redirect('https://savantlab.org')
-
-    return redirect('https://live.savantlab.org')
+    return redirect('https://login.savantlab.org')
 
 
 @user.route('/<username>/get/users', methods=['GET'])

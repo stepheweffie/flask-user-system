@@ -4,14 +4,14 @@ from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect
 from http import HTTPStatus
 from flask_migrate import Migrate
-import os 
 from flask_bootstrap import Bootstrap5
 from dotenv import load_dotenv
 from login_app.models import db, ma, User 
 from flask_mail import Mail
 from flask_login import LoginManager
-
 from flask_jwt_extended import JWTManager
+from datetime import datetime, timedelta
+import os 
 
 load_dotenv()
 login_manager = LoginManager()
@@ -35,6 +35,10 @@ def create_app():
     app = Flask(__name__, static_url_path='/static')  
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///login.sqlite'
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+    app.config["JWT_SECRET_KEY"] = os.getenv('JWT_SECRET_KEY')
+    app.config['JWT_TOKEN_LOCATION'] = ['cookies']
+    app.config['JWT_COOKIE_CSRF_PROTECT'] = False
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)  
     app.config['PARENT_DOMAIN'] = PARENT_DOMAIN
     app.config['ADMIN_USER'] = os.getenv('ADMIN_USER')
     app.config['ADMIN_PASS'] = os.getenv('ADMIN_PASS')

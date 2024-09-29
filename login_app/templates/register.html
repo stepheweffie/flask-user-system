@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from 'bootstrap5/form.html' import render_form %}
 {% block content %}
-<h1 class="animate__animated fadeIn">Register</h1>
+<h1 class="animate__animated toggle">Register</h1>
 <form method="POST" action="{{ url_for('auth.register') }}">
     {{ form.csrf_token }}
    

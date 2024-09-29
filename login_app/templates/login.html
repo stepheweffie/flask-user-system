@@ -5,9 +5,10 @@
 {% block content %}
 <h1 class="animate__animated fadeIn">Login</h1>
 
-<form method="POST" action="{{ url_for('auth.login_post') }}">    
+<form method="POST" action="{{ url_for('auth.login') }}">    
     {{ form.csrf_token }} 
-    {{ render_form(form) }}   
+    {{ render_form(form) }}  
+    <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
 </form>
 
 {% endblock %}

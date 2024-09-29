@@ -5,8 +5,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from urllib.parse import urlparse, urljoin
 import random
-
-from flask_jwt_extended import create_access_token
+import datetime
+from flask_jwt_extended import create_access_token, set_access_cookies
 from flask_mail import Mail, Message
 from flask_login import login_user, login_required, logout_user, current_user
 from login_app import mail 
@@ -15,6 +15,7 @@ from login_app.models import User, db
 from login_app.forms import LoginForm, RegisterForm, VerifyForm, AuthForm
 from sqlalchemy.exc import IntegrityError
 
+   
 auth = Blueprint('auth', __name__)
 
 
@@ -53,34 +54,25 @@ def login_required(f):
         if not current_user.is_authenticated:
             return redirect(url_for('auth.login', next=request.url))
         return f(*args, **kwargs)
-    return decorated_function
+    return decorated_function      
 
 
 @auth.route('/verify/<username>', methods=['GET'])  
 def verify(username):
 
-    form = VerifyForm()
-    user = get_user(username) 
-    
-    if user is False:
-        return redirect(url_for('auth.register', username=username))
-
-    if current_user.is_authenticated and current_user.is_verified:
-        return redirect(url_for('user.index', username=username))    
-    
-    return render_template('verify.html', username=user.username, form=form)
+    form = VerifyForm() 
+    return render_template('verify.html', username=username, form=form)
 
 
 @auth.route("/verify/<username>", methods=['GET','POST'])
 def verify_post(username):
-    user = get_user(username)
-    verified = user.is_verified
     
+    form = VerifyForm() 
     if request.method == 'POST':
-        if verified is False:
+        if form.validate_on_submit():
             try:
                 user_email = request.form["email"]
-
+                user = get_user(username)
                 # Check if the email already exists in the database
                 existing_user = User.query.filter_by(email=user_email).first()
                 if existing_user and existing_user.id != user.id:
@@ -93,10 +85,20 @@ def verify_post(username):
                     return redirect(url_for('auth.verify', username=username))
                 
                 try: 
+                    if user.is_verified:
+                        return redirect(url_for('auth.authorize', username=username))
+
+                    if user.is_active:
+                        return redirect(url_for('auth.authorize', username=username))
+                    
                     user.email = user_email  
                     access_token = create_access_token(identity=username)
                     user.token = access_token
+                    resp = jsonify({'login': True})
+                    set_access_cookies(resp, access_token)
+                    user.current_auth_time = datetime.datetime.now()
                     db.session.commit() 
+                    
                     return redirect(url_for('auth.send_onboard_email', username=username))
                     
                 except IntegrityError:
@@ -107,7 +109,8 @@ def verify_post(username):
             except KeyError:
                 flash('Email is required.', 'info')
 
-    return redirect(url_for('auth.verify', username=username))
+    return render_template('verify.html', form=form, username=username)
+
 
 
 @auth.route('/login', methods=['GET', 'POST'])
@@ -124,18 +127,16 @@ def login():
             return redirect(url_for('auth.register'))
 
         if user and user.check_password(password):
-            login_user(user, fresh=True)
+            login_user(user, fresh=True, remember=True)
+            user.last_login = datetime.datetime.now()
             next_page = request.args.get('next')
             if not next_page or not is_safe_url(next_page):
-                next_page = url_for('user.index', username=user.username)
+                next_page = url_for('user.index', username=username)
             return redirect(next_page)
         
         if not user.check_password(password):
             flash('Please check your login details and try again.')
             return redirect(url_for('auth.login'))
-            
-    if current_user.is_authenticated:
-        return redirect(url_for('auth.authorize', username=current_user.username)) 
 
     # if current_user.is_authenticated and current_user.email is not None:
     #    return redirect(url_for('auth.authorize', username=current_user.username))
@@ -162,7 +163,7 @@ def register():
             username = request.form.get('username')
             password = request.form.get('password')
             
-            user = get_user(username)
+            user = get_user(username)     
 
             if user:
                 flash('Username already exists')
@@ -171,17 +172,14 @@ def register():
             new_user = User(username=username, password=password)
             db.session.add(new_user)
             db.session.commit()
-
+            # add username to session breaks the routing 
             return redirect(url_for('auth.verify', username=username))
         
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Registration error: {str(e)}")
             flash('Registration Unsuccessful')
-            return redirect(url_for('auth.register')) 
-    
-    if current_user.is_authenticated:
-        return redirect(url_for('user.index', username=current_user.username))
+            return redirect(url_for('auth.register'))  
      
     return render_template('register.html', form=form)
 
@@ -224,7 +222,7 @@ def send_code_auth(username):
     if user and user.is_verified:
         return redirect(url_for('user.index', username=username))
     
-    if user.token is not None:
+    if token is not None:
 
         if current_user.is_authenticated and hasattr(current_user, 'sms'): 
             if 'shortcode' not in session:
@@ -232,8 +230,7 @@ def send_code_auth(username):
                 message = 'Welcome to Savantlab.org! Click HERE to enter the following shortcode: ' + str(shortcode)
                 return redirect(url_for('auth.authorize', username=username))
 
-        if user.email is not None:
-            
+        if user.email is not None:     
             link = user.auth_link_route
             if link is None:
                 return redirect(url_for('user.index', username=username))
@@ -253,7 +250,7 @@ def send_code_auth(username):
                     mail.send(msg)
                     user.token = None
                     db.session.commit()
-                    return redirect(url_for('user.index', username=username))
+                    return redirect(url_for('auth.authorize', username=username))
                 
                 except TypeError:
                     return redirect(url_for('auth.authorize', username=username))
@@ -327,10 +324,10 @@ def authorize(username):
         if user.is_active is False: 
             return redirect(url_for('auth.send_onboard_email', username=username)) 
         
-        return redirect(url_for('auth.send_code_auth', username=username))    
+        return redirect(url_for('user.index', username=username))    
 
-    if verified or current_user.is_authenticated:
-        return redirect(url_for('user.index', username=username))
+    if verified:
+        return redirect(PARENT_DOMAIN)
 
     return redirect(url_for('auth.login'))
 
@@ -342,12 +339,14 @@ def authorize_link(username, auth_link_route):
     if auth_link_route == link_route:
         user.is_verified = True
         db.session.commit()
-    return redirect(url_for('user.index', username=username))
+    return redirect(url_for('auth.authorize', username=username))
     
 
 @auth.route('/logout', methods=["GET", 'POST'])
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for('auth.login'))
+    resp = make_response(redirect(url_for('auth.login')))
+    unset_jwt_cookies(resp)
+    return resp
 
