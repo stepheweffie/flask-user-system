@@ -1,4 +1,4 @@
-from flask import jsonify, Blueprint, abort, render_template, redirect, url_for, request, flash, session
+from flask import make_response, jsonify, Blueprint, abort, render_template, redirect, url_for, request, flash, session
 
 from itsdangerous import URLSafeTimedSerializer
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,7 +6,7 @@ from functools import wraps
 from urllib.parse import urlparse, urljoin
 import random
 import datetime
-from flask_jwt_extended import create_access_token, set_access_cookies
+from flask_jwt_extended import create_access_token, set_access_cookies, unset_jwt_cookies, jwt_required, get_jwt_identity
 from flask_mail import Mail, Message
 from flask_login import login_user, login_required, logout_user, current_user
 from login_app import mail 
@@ -59,7 +59,6 @@ def login_required(f):
 
 @auth.route('/verify/<username>', methods=['GET'])  
 def verify(username):
-
     form = VerifyForm() 
     return render_template('verify.html', username=username, form=form)
 
@@ -94,12 +93,12 @@ def verify_post(username):
                     user.email = user_email  
                     access_token = create_access_token(identity=username)
                     user.token = access_token
-                    resp = jsonify({'login': True})
+                    resp = make_response(redirect(url_for('auth.send_onboard_email', username=username))) 
                     set_access_cookies(resp, access_token)
                     user.current_auth_time = datetime.datetime.now()
                     db.session.commit() 
-                    
-                    return redirect(url_for('auth.send_onboard_email', username=username))
+        
+                    return resp
                     
                 except IntegrityError:
                     db.session.rollback()
@@ -129,10 +128,15 @@ def login():
         if user and user.check_password(password):
             login_user(user, fresh=True, remember=True)
             user.last_login = datetime.datetime.now()
+            access_token = create_access_token(identity=username) 
+            user.current_auth_time = datetime.datetime.now()
+            db.session.commit()    
             next_page = request.args.get('next')
             if not next_page or not is_safe_url(next_page):
                 next_page = url_for('user.index', username=username)
-            return redirect(next_page)
+                resp = make_response(redirect(next_page))
+                set_access_cookies(resp, access_token)
+            return resp
         
         if not user.check_password(password):
             flash('Please check your login details and try again.')
@@ -185,6 +189,7 @@ def register():
 
 
 @auth.route('/send-onboard-email/<username>', methods=['GET'])
+@jwt_required()
 def send_onboard_email(username):
     
     user = get_user(username)   
@@ -208,10 +213,11 @@ def send_onboard_email(username):
         except TypeError:
             return redirect(url_for('auth.authorize', username=username))
 
-    return redirect(url_for('user.index', username=username))
+    return redirect(url_for('auth.verify', username=username))
 
 
 @auth.route('/send-code-auth/<username>', methods=['GET'])
+@jwt_required()
 def send_code_auth(username):
     user = get_user(username)
     verified = user.is_verified
@@ -250,7 +256,9 @@ def send_code_auth(username):
                     mail.send(msg)
                     user.token = None
                     db.session.commit()
-                    return redirect(url_for('auth.authorize', username=username))
+                    user_route = url_for('user.index', username=username)
+                    resp = make_response(user_route)
+                    return resp
                 
                 except TypeError:
                     return redirect(url_for('auth.authorize', username=username))
@@ -301,6 +309,7 @@ def authorize_post(username):
 
 
 @auth.route('/authorize/<username>', methods=['GET'])
+@jwt_required()
 def authorize(username): 
     form = AuthForm()
     user = get_user(username)
@@ -324,9 +333,9 @@ def authorize(username):
         if user.is_active is False: 
             return redirect(url_for('auth.send_onboard_email', username=username)) 
         
-        return redirect(url_for('user.index', username=username))    
+        return redirect(url_for('auth.send_code_auth', username=username))    
 
-    if verified:
+    if token is None or verified:
         return redirect(PARENT_DOMAIN)
 
     return redirect(url_for('auth.login'))

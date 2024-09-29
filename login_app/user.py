@@ -16,9 +16,8 @@ def generate_auth_link(username):
     auth_str = '-random-insults/'
     auth_link = auth_str + str(username)
     logged_in.auth_link_route = str(auth_link)
-    token = logged_in.token
     db.session.commit()
-    return token if token is not None else auth_link
+    return auth_link
 
 
 @user.route('/<username>', methods=['GET', 'POST'])
@@ -53,6 +52,7 @@ def index(username):
             link = current_user.auth_link_route
             token = generate_auth_link(username)
         return redirect('https://savantlab.org')
+    
     return redirect('https://login.savantlab.org')
 
 
