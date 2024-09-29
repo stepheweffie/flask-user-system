@@ -85,10 +85,10 @@ def verify_post(username):
                 
                 try: 
                     if user.is_verified:
-                        return redirect(url_for('auth.authorize', username=username))
+                        return redirect(url_for('auth.login'))
 
                     if user.is_active:
-                        return redirect(url_for('auth.authorize', username=username))
+                        return redirect(url_for('auth.login'))
                     
                     user.email = user_email  
                     access_token = create_access_token(identity=username)
@@ -316,6 +316,7 @@ def authorize(username):
     shortcode = user.shortcode 
     verified = user.is_verified 
     token = user.token
+    jwt_user = get_jwt_identity()
 
     if current_user.is_authenticated and hasattr(current_user, 'sms'):
         if 'shortcode' not in session:  
@@ -328,12 +329,12 @@ def authorize(username):
     if user.email is None:
         return redirect(url_for('auth.verify', username=username))
 
-    if token is not None and verified is False:   
+    if token is not None and verified is False:       
         
-        if user.is_active is False: 
-            return redirect(url_for('auth.send_onboard_email', username=username)) 
-        
-        return redirect(url_for('auth.send_code_auth', username=username))    
+        access_token = create_access_token(identity=username)
+        resp = make_response(url_for('auth.send_code_auth', username=username))
+        set_access_cookies(resp, access_token)
+        return resp
 
     if token is None or verified:
         return redirect(PARENT_DOMAIN)
